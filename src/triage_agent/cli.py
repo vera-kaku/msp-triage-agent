@@ -3,7 +3,9 @@
   triage run  --provider deepseek --subject "VPN down" --body "Nobody can connect"
   triage run  --provider keyword --ticket T21
   triage batch --provider deepseek --tickets data/imported.jsonl --out triaged.jsonl
-  triage eval --provider deepseek --mode both --workers 4
+  triage eval --provider deepseek --mode all --workers 4
+
+--mode both runs agent and workflow; --mode all also runs hybrid.
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ from .evaluate import markdown_table, run_all, score
 from .llm import PROVIDERS, make_model
 from .models import RunResult, Ticket
 from .runner import MODES, Triager, load_tickets
+
+MODE_GROUPS = {"both": ("agent", "workflow"), "all": MODES}
 
 DEFAULT_TICKETS = Path("eval/tickets.jsonl")
 
@@ -78,7 +82,7 @@ def cmd_run(args: argparse.Namespace) -> None:
         ticket = Ticket("cli", args.subject, args.body)
     else:
         sys.exit("Give --ticket ID, or both --subject and --body.")
-    modes = MODES if args.mode == "both" else (args.mode,)
+    modes = MODE_GROUPS.get(args.mode, (args.mode,))
     for mode in modes:
         result = triager.run(ticket, mode)
         if args.json:
@@ -92,7 +96,7 @@ def cmd_batch(args: argparse.Namespace) -> None:
     config = load_config(args.config)
     triager = Triager(config, make_model(args.provider, config, args.model))
     rows = load_tickets(args.tickets)
-    mode = "agent" if args.mode == "both" else args.mode
+    mode = "agent" if args.mode in MODE_GROUPS else args.mode
     runs = run_all(triager, rows, mode, args.workers, progress=True)
     with open(args.out, "w", encoding="utf-8") as handle:
         for run in runs:
@@ -107,7 +111,7 @@ def cmd_eval(args: argparse.Namespace) -> None:
     triager = Triager(config, model)
     rows = load_tickets(args.tickets)
     splits = sorted({r.get("split", "all") for r in rows}) if args.split == "each" else [args.split]
-    modes = MODES if args.mode == "both" else (args.mode,)
+    modes = MODE_GROUPS.get(args.mode, (args.mode,))
 
     results, all_runs = {}, {}
     for mode in modes:
@@ -151,7 +155,7 @@ def main(argv: list[str] | None = None) -> None:
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("--provider", choices=PROVIDERS, default="keyword")
         p.add_argument("--model", help="Model or deployment name. Overrides TRIAGE_MODEL.")
-        p.add_argument("--mode", choices=(*MODES, "both"), default="agent")
+        p.add_argument("--mode", choices=(*MODES, *MODE_GROUPS), default="agent")
         p.add_argument("--tickets", default=str(DEFAULT_TICKETS))
 
     run = sub.add_parser("run", help="Triage one ticket and print the result.")

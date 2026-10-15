@@ -41,10 +41,16 @@ Not every ticket needs an agent. The project runs three approaches on the same t
 - **Workflow**: code always searches the knowledge base and past tickets, looks up any CVE
   numbers in the ticket, then makes one model call.
 - **Agent**: the model decides which tools to call, up to six steps.
+- **Hybrid**: the workflow with better retrieval. Code searches with the subject and the
+  full text and merges the results (reciprocal rank fusion). Only when the best knowledge
+  base match is weak, or the ticket mentions a vulnerability without a CVE number, does one
+  small model call suggest search terms and a product name to check against the KEV
+  catalog. Then one model call triages, as in the workflow.
 
 The workflow is cheaper and more predictable. The agent can follow up on what it finds, for
-example checking the KEV catalog for a product named in the ticket when no CVE number is
-given. The evaluation measures whether that is worth the extra calls.
+example rewriting a search in standard IT terms or checking the KEV catalog for a product
+named in the ticket. Hybrid adds those two follow-ups to the workflow as fixed, conditional
+steps. The evaluation measures which approach is worth its cost.
 
 ## Guardrails
 
@@ -80,8 +86,8 @@ With DeepSeek:
 ```bash
 cp .env.example .env          # then add DEEPSEEK_API_KEY
 python scripts/download_kev.py   # optional: the full CISA KEV catalog
-triage run --provider deepseek --ticket T21 --mode both
-triage eval --provider deepseek --mode both --workers 4
+triage run --provider deepseek --ticket T21 --mode all
+triage eval --provider deepseek --mode all --workers 4
 ```
 
 Other providers: `--provider openai`, `azure` or `anthropic`, with the keys listed in
@@ -127,22 +133,37 @@ Keyword baseline (no model, workflow mode):
 
 DeepSeek (`deepseek-flash`, thinking off, temperature 0), October 2026:
 
-| Metric | Agent, dev (30) | Agent, holdout (10) | Workflow, dev (30) | Workflow, holdout (10) |
-|---|---|---|---|---|
-| Ticket type | 100% | 80% | 100% | 90% |
-| Queue | 100% | 100% | 100% | 100% |
-| Priority (exact) | 97% | 90% | 93% | 90% |
-| Priority (within one level) | 100% | 100% | 100% | 100% |
-| Expected KB article cited | 100% | 100% | 100% | 75% |
-| Escalation precision | 100% | 75% | 100% | 75% |
-| Escalation recall | 100% | 100% | 100% | 100% |
-| Model calls per ticket | 2.07 | 2.1 | 1.0 | 1.0 |
-| Seconds per ticket | 4.0 | 4.0 | 2.6 | 2.7 |
+| Metric | Agent, dev (30) | Agent, holdout (10) | Workflow, dev (30) | Workflow, holdout (10) | Hybrid, dev (30) | Hybrid, holdout (10) |
+|---|---|---|---|---|---|---|
+| Ticket type | 100% | 90% | 100% | 90% | 100% | 90% |
+| Queue | 100% | 100% | 100% | 100% | 100% | 100% |
+| Priority (exact) | 97% | 90% | 90% | 90% | 90% | 90% |
+| Priority (within one level) | 100% | 100% | 100% | 100% | 100% | 100% |
+| Expected KB article cited | 100% | 100% | 100% | 75% | 100% | 100% |
+| Escalation precision | 100% | 60% | 100% | 75% | 100% | 75% |
+| Escalation recall | 100% | 100% | 100% | 100% | 100% | 100% |
+| Model calls per ticket | 2.07 | 2.2 | 1.0 | 1.0 | 1.37 | 1.7 |
+| Input tokens (total) | 129,470 | 46,950 | 64,101 | 21,551 | 68,971 | 24,422 |
+| Seconds per ticket | 3.8 | 3.8 | 2.4 | 2.5 | 2.9 | 3.3 |
 
-Both modes get every queue right and miss no escalations. The agent costs about twice the
-input tokens and 1.5 times the latency of the workflow. Its gain is in knowledge base
-citations on the holdout tickets, where the workflow's single search with the whole ticket
-text missed the right article twice and the agent's own search queries did not.
+All three modes get every queue right and miss no escalations. The agent costs about twice
+the input tokens of the workflow. Its first advantage was knowledge base citations: the
+workflow searched with the whole ticket text and missed the right article on two holdout
+tickets, because the customer's words ("password has expired", "let us know the cost")
+did not match the article's ("reset", "quote"). The agent rewrote its searches and found
+both.
+
+Hybrid closes that gap without the agent loop. Merging a subject-only search fixed one
+miss at no cost. The other needed a query rewrite, which the model is asked for only when
+the best match scores below a threshold (set from dev tickets) or the ticket mentions a
+vulnerability without a CVE number. That happened on 18 of the 40 tickets. Hybrid matches
+the agent on citations and escalation with about half the input tokens and a quarter less
+latency. The agent still scores slightly higher on dev priority (two tickets, both about
+whether a deadline is within a week), which is within the noise of this test set.
+
+A caveat on hybrid: it was designed after seeing which holdout tickets the workflow missed,
+so its holdout result is not a clean test of the design. The threshold was set on dev
+tickets only, but a fresh set of tickets is needed to confirm the gain.
 
 The first run, before the ticket type and priority definitions in `config/triage.yaml` were
 rewritten, scored 60–80% on holdout priority and 80% on holdout ticket type. The

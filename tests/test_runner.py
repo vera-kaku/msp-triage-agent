@@ -116,3 +116,49 @@ def test_workflow_makes_one_forced_call_with_context(config):
     prompt = request["messages"][0].text
     assert "search_kb results" in prompt and "CVE-2023-23397" in prompt
     assert result.triage.escalate is True  # the CVE is in the KEV fixture
+
+
+def test_hybrid_skips_the_planner_when_search_is_strong(config):
+    ticket = Ticket("t6", "Reception printer offline",
+                    "The printer at reception shows offline for everyone.")
+    model = ScriptedModel([tool_reply("submit_triage", submit_args(kb_articles=["KB-007"]))])
+    result = Triager(config, model).run(ticket, "hybrid")
+    assert result.model_calls == 1
+    assert [s.tool for s in result.steps] == ["search_kb", "find_similar_tickets",
+                                              "submit_triage"]
+
+
+def test_hybrid_asks_for_search_terms_when_search_is_weak(config):
+    ticket = Ticket("t7", "Back from holiday", "The login screen won't let me in anymore.")
+    model = ScriptedModel([
+        tool_reply("plan_searches", {"kb_query": "reset forgotten password", "product": ""}),
+        tool_reply("submit_triage", submit_args(kb_articles=["KB-001"])),
+    ])
+    result = Triager(config, model).run(ticket, "hybrid")
+    assert result.stop_reason == "submitted"  # KB-001 was found through the planner's query
+    assert result.model_calls == 2
+    assert model.requests[0]["tools"] == ["plan_searches"]
+    assert "weak knowledge base match" in result.steps[0].result
+    assert "reset forgotten password" in result.steps[1].arguments["query"]
+
+
+def test_hybrid_checks_a_named_product_against_kev(config):
+    ticket = Ticket("t8", "FortiGate bug", "Hackers are using a FortiGate SSL VPN bug. Are we ok?")
+    model = ScriptedModel([
+        tool_reply("plan_searches", {"kb_query": "vulnerability patching",
+                                     "product": "Fortinet FortiGate"}),
+        tool_reply("submit_triage", submit_args(queue="security", kb_articles=[])),
+    ])
+    result = Triager(config, model).run(ticket, "hybrid")
+    assert "check_known_exploited" in [s.tool for s in result.steps]
+    assert "check_known_exploited results" in model.requests[1]["messages"][0].text
+
+
+def test_hybrid_ignores_a_product_when_there_is_no_vulnerability(config):
+    ticket = Ticket("t9", "Excel slow", "Excel takes ages to open files.")
+    model = ScriptedModel([
+        tool_reply("plan_searches", {"kb_query": "Excel slow", "product": "Microsoft Excel"}),
+        tool_reply("submit_triage", submit_args()),
+    ])
+    result = Triager(config, model).run(ticket, "hybrid")
+    assert "check_known_exploited" not in [s.tool for s in result.steps]

@@ -35,6 +35,10 @@ class KeywordModel:
         available = {t.name for t in tools}
         called = {c.name for m in messages if m.role == "assistant" for c in m.tool_calls}
 
+        if "plan_searches" in available:
+            security = any(w in lowered for w in _SECURITY_WORDS)
+            return self._call("plan_searches", {"kb_query": _subject(ticket),
+                                                "product": _subject(ticket) if security else ""})
         if ("check_known_exploited" in available and "check_known_exploited" not in called
                 and any(w in lowered for w in _SECURITY_WORDS)):
             query = " ".join(find_cves(ticket)) or _subject(ticket)

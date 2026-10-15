@@ -74,6 +74,12 @@ escalation:
   escalate_on_known_exploited: true    # any match in the CISA KEV catalog
   min_confidence: 0.6
 
+hybrid:
+  # Hybrid mode searches with the subject and the full ticket text, both in code. It makes
+  # one extra model call for better search terms only when one of these is true.
+  rewrite_below_kb_score: 10   # the best knowledge base match scores below this (set on dev tickets)
+  vulnerability_words: [vulnerab, exploit, advisory, bug, flaw, patch, zero-day, hacker]   # and no CVE number
+
 limits:
   max_steps: 6
   max_calls_per_tool: 3

@@ -45,6 +45,31 @@ def submit_spec(config: Config) -> ToolSpec:
     )
 
 
+def plan_spec() -> ToolSpec:
+    """Used by hybrid mode when the code's own searches look weak."""
+    return ToolSpec(
+        name="plan_searches",
+        description="Suggest search terms for this ticket.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "kb_query": {
+                    "type": "string",
+                    "description": "Keywords for the knowledge base, in the standard IT terms "
+                                   "an article title would use rather than the customer's "
+                                   "own wording.",
+                },
+                "product": {
+                    "type": "string",
+                    "description": "Vendor and product name of software or a device that the "
+                                   "ticket says may have a vulnerability. Empty if none.",
+                },
+            },
+            "required": ["kb_query", "product"],
+        },
+    )
+
+
 def research_specs() -> list[ToolSpec]:
     return [
         ToolSpec("search_kb",

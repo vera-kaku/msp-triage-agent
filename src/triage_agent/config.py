@@ -20,6 +20,7 @@ class Config:
     escalation: dict
     limits: dict
     paths: dict[str, str] = field(default_factory=dict)
+    hybrid: dict = field(default_factory=dict)
 
     def path(self, key: str) -> Path:
         return self.root / self.paths[key]
@@ -41,4 +42,5 @@ def load_config(path: str | Path = DEFAULT_CONFIG) -> Config:
         escalation=data["escalation"],
         limits=data["limits"],
         paths=data["paths"],
+        hybrid=data.get("hybrid", {}),
     )

@@ -65,3 +65,16 @@ class BM25Index:
                 scored.append((doc_id, score))
         scored.sort(key=lambda item: item[1], reverse=True)
         return scored[:k]
+
+    def search_many(self, queries: list[str], k: int = 3, depth: int = 10,
+                    ) -> list[tuple[str, float]]:
+        """Run several queries and merge them with reciprocal rank fusion, so a document
+        that ranks well for any one query is kept. Returns each document's best score."""
+        fused: dict[str, float] = {}
+        best: dict[str, float] = {}
+        for query in queries:
+            for rank, (doc_id, score) in enumerate(self.search(query, depth)):
+                fused[doc_id] = fused.get(doc_id, 0.0) + 1 / (60 + rank)
+                best[doc_id] = max(best.get(doc_id, 0.0), score)
+        ranked = sorted(fused, key=lambda doc_id: fused[doc_id], reverse=True)[:k]
+        return [(doc_id, best[doc_id]) for doc_id in ranked]

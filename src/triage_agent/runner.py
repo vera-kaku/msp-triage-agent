@@ -10,11 +10,17 @@ from .kev import KevCatalog, find_cves
 from .knowledge import KnowledgeBase, TicketHistory
 from .llm.base import ChatModel, Message, ToolResult, Usage
 from .models import RunResult, Step, Ticket, Triage
-from .prompts import agent_system_prompt, workflow_system_prompt, wrap_ticket
+from .prompts import (
+    PLANNER_SYSTEM_PROMPT,
+    agent_system_prompt,
+    workflow_system_prompt,
+    wrap_ticket,
+)
 from .redact import redact
-from .tools import RunState, Toolbox, research_specs, submit_spec
+from .tools import RunState, Toolbox, plan_spec, research_specs, submit_spec
 
-MODES = ("agent", "workflow")
+MODES = ("agent", "workflow", "hybrid")
+VULNERABILITY_REASON = "mentions a vulnerability without a CVE number"
 
 
 class Triager:
@@ -39,7 +45,7 @@ class Triager:
         if mode == "agent":
             outcome = self._agent(text, state, steps, usage)
         else:
-            outcome = self._workflow(text, state, steps, usage)
+            outcome = self._workflow(text, state, steps, usage, hybrid=mode == "hybrid")
         triage, model_calls, rejected, stop_reason = outcome
         triage = self._apply_policy(triage, state, ticket.text())
         return RunResult(
@@ -98,19 +104,57 @@ class Triager:
         return self.fallback("The agent reached its step limit."), max_steps, rejected, \
             "step_limit"
 
-    def _workflow(self, text: str, state: RunState, steps: list[Step], usage: Usage):
-        """Fixed steps chosen by code: search, look up CVEs in the text, then one model call."""
+    def _workflow(self, text: str, state: RunState, steps: list[Step], usage: Usage,
+                  hybrid: bool = False):
+        """Fixed steps chosen by code: search, look up CVEs in the text, then one model call.
+
+        Hybrid mode searches with the subject and the full text and merges the results. Only
+        when that looks weak does it ask the model for search terms, which costs one extra
+        call."""
         context = {}
-        for name, query in [("search_kb", text), ("find_similar_tickets", text)]:
-            content, _ = self.toolbox.run(name, {"query": query}, state)
-            steps.append(Step(name, {"query": "<ticket text>"}, content))
-            context[name] = json.loads(content)
-        cves = find_cves(text)
-        if cves:
-            content, _ = self.toolbox.run("check_known_exploited", {"query": " ".join(cves)},
-                                          state)
-            steps.append(Step("check_known_exploited", {"query": " ".join(cves)}, content))
-            context["check_known_exploited"] = json.loads(content)
+        planner_calls = 0
+        if hybrid:
+            limits = self.config.limits
+            subject = text.split("\n", 1)[0].removeprefix("Subject: ")
+            queries = [subject, text]
+            kb_hits = self.kb.search(queries, limits["kb_results"])
+            reasons = self._plan_reasons(text, kb_hits)
+            plan = {}
+            if reasons:
+                plan = self._plan(text, usage)
+                planner_calls = 1
+                steps.append(Step("plan_searches", plan, "; ".join(reasons)))
+            history = self.history.search(queries, limits["history_results"])
+            shown = "<subject> | <ticket text>"
+            if plan.get("kb_query"):
+                # The planner only runs when the code's own search looked weak, so its results
+                # go first and the earlier results fill any remaining places.
+                kb_hits = _merge(self.kb.search(plan["kb_query"], limits["kb_results"]), kb_hits)
+                history = _merge(self.history.search(plan["kb_query"],
+                                                     limits["history_results"]), history)
+                shown += f" | {plan['kb_query']}"
+            state.kb_ids_seen.update(h["id"] for h in kb_hits)
+            for name, hits, empty in [("search_kb", kb_hits, "No matching articles."),
+                                      ("find_similar_tickets", history, "No similar tickets.")]:
+                context[name] = hits or empty
+                steps.append(Step(name, {"query": shown}, json.dumps(context[name])))
+            # Look up a product only for a vulnerability question, not every product named.
+            product = plan.get("product") if any(r.startswith(VULNERABILITY_REASON)
+                                                 for r in reasons) else None
+            kev_queries = [q for q in (" ".join(find_cves(text)), product) if q]
+        else:
+            for name, query in [("search_kb", text), ("find_similar_tickets", text)]:
+                content, _ = self.toolbox.run(name, {"query": query}, state)
+                steps.append(Step(name, {"query": "<ticket text>"}, content))
+                context[name] = json.loads(content)
+            kev_queries = [" ".join(find_cves(text))] if find_cves(text) else []
+        lookups = []
+        for query in kev_queries:
+            content, _ = self.toolbox.run("check_known_exploited", {"query": query}, state)
+            steps.append(Step("check_known_exploited", {"query": query}, content))
+            lookups.append(json.loads(content))
+        if lookups:
+            context["check_known_exploited"] = lookups[0] if len(lookups) == 1 else lookups
 
         rendered = "\n\n".join(f"{name} results:\n{json.dumps(value)}"
                                for name, value in context.items())
@@ -129,7 +173,7 @@ class Triager:
                 steps.append(Step(call.name, call.arguments, "; ".join(errors) or "accepted",
                                   bool(errors)))
                 if not errors:
-                    return triage, attempt, rejected, "submitted"
+                    return triage, attempt + planner_calls, rejected, "submitted"
             rejected += 1
             messages.append(Message("assistant", text=reply.text, tool_calls=reply.tool_calls,
                                     extra=reply.extra))
@@ -137,8 +181,32 @@ class Triager:
                 ToolResult(c.id, "Rejected: " + "; ".join(errors), True)
                 for c in reply.tool_calls
             ]) if reply.tool_calls else Message("user", text="Call submit_triage."))
-        return self.fallback("The model did not return a valid triage."), 2, rejected, \
-            "step_limit"
+        return self.fallback("The model did not return a valid triage."), 2 + planner_calls, \
+            rejected, "step_limit"
+
+    def _plan_reasons(self, text: str, kb_hits: list[dict]) -> list[str]:
+        """Why hybrid mode should ask the model for search terms. Empty means it should not."""
+        rules = self.config.hybrid
+        reasons = []
+        best = kb_hits[0]["score"] if kb_hits else 0.0
+        if best < rules.get("rewrite_below_kb_score", 0):
+            reasons.append(f"weak knowledge base match (best score {best})")
+        lowered = text.lower()
+        if not find_cves(text) and any(w in lowered for w in rules.get("vulnerability_words", [])):
+            reasons.append(VULNERABILITY_REASON)
+        return reasons
+
+    def _plan(self, text: str, usage: Usage) -> dict:
+        """One small model call for search terms. A bad answer just means no extra search."""
+        spec = plan_spec()
+        reply = self.model.complete(PLANNER_SYSTEM_PROMPT,
+                                    [Message("user", text=wrap_ticket(text))], [spec],
+                                    tool_choice=spec.name)
+        _add(usage, reply.usage)
+        call = next((c for c in reply.tool_calls if c.name == spec.name), None)
+        args = call.arguments if call else {}
+        return {key: value.strip() for key in ("kb_query", "product")
+                if isinstance(value := args.get(key), str) and value.strip()}
 
     # ------------------------------------------------------------------ checks
 
@@ -211,6 +279,16 @@ class Triager:
             summary=reason, draft_reply="", escalate=True,
             escalation_reasons=[f"Rule: {reason} A technician will triage it."],
         )
+
+
+def _merge(first: list[dict], then: list[dict]) -> list[dict]:
+    """Results from both lists without duplicates, as many as the longer list had."""
+    seen, merged = set(), []
+    for hit in first + then:
+        if hit["id"] not in seen:
+            seen.add(hit["id"])
+            merged.append(hit)
+    return merged[:max(len(first), len(then))]
 
 
 def _add(total: Usage, part: Usage) -> None:
