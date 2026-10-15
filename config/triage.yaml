@@ -1,0 +1,65 @@
+# Triage rules for the service desk.
+# The model chooses within these options. The escalation rules are enforced in code
+# after the model submits, so they apply whatever the model decides.
+
+paths:
+  kb_dir: kb
+  history: data/history.jsonl
+  kev: data/kev.json              # full CISA KEV catalog, created by scripts/download_kev.py
+  kev_fallback: data/kev_fixture.json   # small sample used for tests and when kev.json is missing
+
+ticket_types:
+  incident: Something that used to work is broken or not working as expected.
+  request: The customer asks for something new, such as access, a setup or a purchase.
+  problem: The same fault keeps coming back and needs its underlying cause found.
+  change: A planned change to a system, such as a rule, setting or configuration update.
+
+queues:
+  service-desk:
+    description: Everyday user issues such as Outlook, Teams, OneDrive, printers, laptops and mailbox storage.
+    keywords: [outlook, teams, onedrive, printer, print, laptop, mailbox, sync, camera, microphone, excel, word, screen]
+  identity-access:
+    description: Passwords, account lockouts, MFA, permissions, shared mailboxes, new starters and leavers.
+    keywords: [password, locked, lockout, mfa, authenticator, access, permission, shared, starter, leaver, leaving, account, onboarding, offboarding]
+  network:
+    description: Internet, Wi-Fi, VPN, firewall rules and connectivity between sites.
+    keywords: [wifi, wi-fi, internet, vpn, network, firewall, connection, connect, slow, dropping, forticlient]
+  security:
+    description: Phishing, suspicious sign-ins, malware, ransomware, exposed data and known vulnerabilities.
+    keywords: [phishing, suspicious, malware, virus, ransom, ransomware, encrypted, hacked, breach, cve, vulnerability, exploit, clicked, scam]
+  cloud-infrastructure:
+    description: Servers, line-of-business applications, Azure and AWS resources, backups and file restores.
+    keywords: [server, azure, aws, backup, restore, deleted, sharepoint, database, application, vm, outage]
+  procurement:
+    description: Quotes, hardware purchases, software licences and renewals.
+    keywords: [quote, purchase, buy, order, licence, license, renewal, monitor, new laptop, pricing]
+
+priorities:
+  P1: Critical. The business or many users cannot work, or there is an active security incident.
+  P2: High. A team or a key person cannot work, or a security risk needs action today.
+  P3: Medium. One user is affected and has a workaround, or a request has a near deadline.
+  P4: Low. Questions, how-to requests and changes that are not urgent.
+
+# Used only by the keyword baseline (provider "keyword"), which needs no API key.
+keyword_baseline:
+  priority:
+    P1: [everyone, all staff, whole office, nobody can, ransom, encrypted, outage, server is down, breach]
+    P2: [cannot work, can't work, urgent, asap, clicked, entered my password, suspicious sign, vulnerability, cve]
+    P4: [how do i, how can i, question, quote, next month, next week, when you get a chance, no rush]
+  type:
+    request: [please set up, new starter, request, can you add, need access, quote, purchase, order, leaving]
+    change: [change the, update the, firewall rule, schedule, reconfigure, rename]
+    problem: [keeps happening, again, every morning, every day, recurring, third time, still happening]
+
+escalation:
+  # A person takes over now. The model can also escalate on its own judgement.
+  always_escalate_priorities: [P1]
+  always_escalate_queues: []
+  escalate_on_known_exploited: true    # any match in the CISA KEV catalog
+  min_confidence: 0.6
+
+limits:
+  max_steps: 6
+  max_calls_per_tool: 3
+  kb_results: 3
+  history_results: 3

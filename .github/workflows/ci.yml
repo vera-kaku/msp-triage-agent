@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e ".[dev,openai,anthropic]"
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest -q
+      - name: Offline evaluation with the keyword baseline
+        run: triage eval --provider keyword --mode workflow --split all --out /tmp/eval
+
+  powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the import script parses and runs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path export | Out-Null
+          Set-Content export/ticket1.txt "Subject: Printer offline`nFrom: a@example.co.nz`n`nNobody can print."
+          ./scripts/Import-Tickets.ps1 -FolderPath export -OutputPath imported.jsonl
+          $row = Get-Content imported.jsonl | ConvertFrom-Json
+          if ($row.subject -ne 'Printer offline') { throw "Unexpected subject: $($row.subject)" }
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t msp-triage-agent .
+      - name: Run offline example
+        run: docker run --rm msp-triage-agent run --provider keyword --ticket T13

@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+data/kev.json
+data/hf_tickets.jsonl
+eval/results/*.json
+!eval/results/.gitkeep

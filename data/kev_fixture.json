@@ -1,0 +1,74 @@
+{
+  "title": "Test fixture in the CISA KEV format",
+  "note": "Small hand-made sample for tests and offline demos. Fields are trimmed and ransomware flags are left as Unknown. Run scripts/download_kev.py to use the live catalog.",
+  "catalogVersion": "fixture",
+  "dateReleased": "2026-10-15T00:00:00.000Z",
+  "count": 5,
+  "vulnerabilities": [
+    {
+      "cveID": "CVE-2021-44228",
+      "vendorProject": "Apache",
+      "product": "Log4j2",
+      "vulnerabilityName": "Apache Log4j2 Remote Code Execution Vulnerability",
+      "dateAdded": "2021-12-10",
+      "shortDescription": "Apache Log4j2 contains a vulnerability that allows remote code execution through crafted log messages.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2021-12-24",
+      "knownRansomwareCampaignUse": "Unknown",
+      "notes": "",
+      "cwes": []
+    },
+    {
+      "cveID": "CVE-2023-23397",
+      "vendorProject": "Microsoft",
+      "product": "Office Outlook",
+      "vulnerabilityName": "Microsoft Office Outlook Privilege Escalation Vulnerability",
+      "dateAdded": "2023-03-14",
+      "shortDescription": "Microsoft Office Outlook contains a privilege escalation vulnerability triggered by a specially crafted email.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2023-04-04",
+      "knownRansomwareCampaignUse": "Unknown",
+      "notes": "",
+      "cwes": []
+    },
+    {
+      "cveID": "CVE-2023-4966",
+      "vendorProject": "Citrix",
+      "product": "NetScaler ADC and NetScaler Gateway",
+      "vulnerabilityName": "Citrix NetScaler ADC and NetScaler Gateway Buffer Overflow Vulnerability",
+      "dateAdded": "2023-10-18",
+      "shortDescription": "Citrix NetScaler ADC and NetScaler Gateway contain a buffer overflow that can disclose sensitive information when configured as a gateway.",
+      "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+      "dueDate": "2023-11-08",
+      "knownRansomwareCampaignUse": "Unknown",
+      "notes": "",
+      "cwes": []
+    },
+    {
+      "cveID": "CVE-2024-21762",
+      "vendorProject": "Fortinet",
+      "product": "FortiOS",
+      "vulnerabilityName": "Fortinet FortiOS Out-of-Bound Write Vulnerability",
+      "dateAdded": "2024-02-09",
+      "shortDescription": "Fortinet FortiOS contains an out-of-bound write vulnerability in the SSL VPN that may allow remote code execution.",
+      "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+      "dueDate": "2024-02-16",
+      "knownRansomwareCampaignUse": "Unknown",
+      "notes": "",
+      "cwes": []
+    },
+    {
+      "cveID": "CVE-2023-34362",
+      "vendorProject": "Progress",
+      "product": "MOVEit Transfer",
+      "vulnerabilityName": "Progress MOVEit Transfer SQL Injection Vulnerability",
+      "dateAdded": "2023-06-02",
+      "shortDescription": "Progress MOVEit Transfer contains a SQL injection vulnerability that could allow an unauthenticated attacker to access its database.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2023-06-23",
+      "knownRansomwareCampaignUse": "Unknown",
+      "notes": "",
+      "cwes": []
+    }
+  ]
+}
