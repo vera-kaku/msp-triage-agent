@@ -9,8 +9,13 @@ paths:
   kev_fallback: data/kev_fixture.json   # small sample used for tests and when kev.json is missing
 
 ticket_types:
-  incident: Something that used to work is broken or not working as expected.
-  request: The customer asks for something new, such as access, a setup or a purchase.
+  incident: >-
+    Something that used to work is broken or not working as expected, including a user who
+    cannot sign in because of a forgotten password, a lockout or a lost MFA device, and any
+    active security event.
+  request: >-
+    The customer asks for something new, such as access, a setup, a purchase or advice,
+    including a question about whether a published vulnerability affects them.
   problem: The same fault keeps coming back and needs its underlying cause found.
   change: A planned change to a system, such as a rule, setting or configuration update.
 
@@ -35,10 +40,21 @@ queues:
     keywords: [quote, purchase, buy, order, licence, license, renewal, monitor, new laptop, pricing]
 
 priorities:
-  P1: Critical. The business or many users cannot work, or there is an active security incident.
-  P2: High. A team or a key person cannot work, or a security risk needs action today.
-  P3: Medium. One user is affected and has a workaround, or a request has a near deadline.
-  P4: Low. Questions, how-to requests and changes that are not urgent.
+  P1: >-
+    Critical. The business, a whole site or many users (about ten or more) cannot work, a
+    business-critical system is down, or a security incident is spreading across the
+    business, such as ransomware.
+  P2: >-
+    High. A small group or a key person cannot work, a security incident affects one user or
+    device (a clicked link, an entered password, unexpected MFA prompts, malware), or a
+    known exploited vulnerability may affect the customer.
+  P3: >-
+    Medium. Something is broken for one user or a shared device, or a request must be done
+    within about a week.
+  P4: >-
+    Low. Nothing is broken and no one is blocked: questions, how-to requests, minor
+    annoyances the customer says are not urgent, and routine access, setup or change
+    requests with no deadline or a deadline more than a week away.
 
 # Used only by the keyword baseline (provider "keyword"), which needs no API key.
 keyword_baseline:

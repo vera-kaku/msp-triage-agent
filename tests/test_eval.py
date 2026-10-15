@@ -1,9 +1,12 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from triage_agent.cli import main
+from triage_agent.evaluate import run_all, score
 from triage_agent.knowledge import KnowledgeBase
-from triage_agent.runner import load_tickets
+from triage_agent.runner import Triager, load_tickets
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,3 +60,29 @@ def test_eval_command_runs_offline(tmp_path, capsys, monkeypatch):
     saved = json.loads(next(tmp_path.glob("*.json")).read_text())
     assert set(saved["runs"]) == {"agent", "workflow"}
     assert len(saved["runs"]["agent"]) == 40
+
+
+class _FailingModel:
+    name = "failing"
+
+    def __init__(self, error):
+        self.error = error
+
+    def complete(self, *args, **kwargs):
+        raise self.error
+
+
+def test_failed_run_escalates_and_batch_continues(config):
+    rows = load_tickets(ROOT / "eval" / "tickets.jsonl")[:3]
+    runs = run_all(Triager(config, _FailingModel(TimeoutError("timed out"))), rows, "agent")
+    assert [r.stop_reason for r in runs] == ["error"] * 3
+    assert all(r.triage.escalate for r in runs)
+    assert "TimeoutError" in runs[0].triage.escalation_reasons[0]
+    assert score(rows, runs, config.priority_order)["summary"]["errors"] == 3
+
+
+def test_authentication_error_stops_the_batch(config):
+    AuthenticationError = type("AuthenticationError", (Exception,), {})
+    rows = load_tickets(ROOT / "eval" / "tickets.jsonl")[:2]
+    with pytest.raises(AuthenticationError):
+        run_all(Triager(config, _FailingModel(AuthenticationError("bad key"))), rows, "agent")

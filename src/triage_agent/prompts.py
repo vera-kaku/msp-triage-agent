@@ -41,6 +41,10 @@ Rules:
   security incidents (for example a clicked link, an entered password, unexpected MFA
   requests or malware), and vulnerabilities that are known to be exploited. Routine
   tickets go to the normal queue with escalate set to false.
+- If check_known_exploited finds a catalog entry for a product the customer uses, treat
+  it as a known exploited vulnerability, even when the ticket gives no CVE number.
+- Choose the priority from impact and deadline, not from how worried the customer sounds.
+  Use the lowest priority that fits the definitions below.
 - Set confidence between 0 and 1. Use a low value when the ticket is unclear.
 - Keep the draft reply short, friendly and practical, in New Zealand English.
 """
@@ -53,6 +57,7 @@ How to work:
 - Search the knowledge base before relying on your own knowledge.
 - If the ticket mentions a vulnerability, a security advisory, a CVE number or a security
   product issue, use check_known_exploited with the CVE number or product name.
+- Call independent tools in the same step rather than one per step.
 - Use find_similar_tickets when the right queue or priority is not clear.
 - Stop as soon as you have enough information and finish with submit_triage.
   You have at most {max_steps} steps, and every step costs time and money.

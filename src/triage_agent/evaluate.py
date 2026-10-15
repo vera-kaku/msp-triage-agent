@@ -19,7 +19,19 @@ def run_all(triager: Triager, rows: list[dict], mode: str, workers: int = 1,
 
     def run_one(ticket: Ticket) -> RunResult:
         nonlocal done
-        result = triager.run(ticket, mode)
+        try:
+            result = triager.run(ticket, mode)
+        except Exception as err:
+            if type(err).__name__ == "AuthenticationError":
+                raise  # every other ticket would fail the same way
+            # One failed request should not lose the rest of the batch. The ticket goes to
+            # a technician like any other run that ends without a valid triage.
+            result = RunResult(
+                ticket_id=ticket.id, mode=mode, model=triager.model.name,
+                triage=triager.fallback(f"The run failed: {type(err).__name__}: {err}"),
+                steps=[], model_calls=0, input_tokens=0, output_tokens=0, seconds=0.0,
+                rejected_submissions=0, stop_reason="error",
+            )
         if progress:
             with lock:
                 done += 1
@@ -96,6 +108,7 @@ def score(rows: list[dict], runs: Iterable[RunResult], priority_order: list[str]
         "avg_tool_calls": round(tool_calls / n, 2),
         "rejected_submissions": sum(r.rejected_submissions for r in runs),
         "hit_step_limit": sum(r.stop_reason == "step_limit" for r in runs),
+        "errors": sum(r.stop_reason == "error" for r in runs),
         "input_tokens": sum(r.input_tokens for r in runs),
         "output_tokens": sum(r.output_tokens for r in runs),
         "avg_seconds": round(sum(r.seconds for r in runs) / n, 2),
@@ -115,6 +128,7 @@ _ROWS = [
     ("Tool calls per ticket", "avg_tool_calls"),
     ("Rejected submissions", "rejected_submissions"),
     ("Hit step limit", "hit_step_limit"),
+    ("Failed runs", "errors"),
     ("Input tokens (total)", "input_tokens"),
     ("Output tokens (total)", "output_tokens"),
     ("Seconds per ticket", "avg_seconds"),

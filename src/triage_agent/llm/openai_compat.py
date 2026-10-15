@@ -10,11 +10,13 @@ from .base import Message, ModelReply, ToolCall, ToolSpec, Usage
 
 
 class OpenAICompatibleModel:
-    def __init__(self, client: Any, model: str, name: str, extra_body: dict | None = None):
+    def __init__(self, client: Any, model: str, name: str, extra_body: dict | None = None,
+                 temperature: float | None = None):
         self.client = client
         self.model = model
         self.name = name
         self.extra_body = extra_body or {}
+        self.temperature = temperature  # None leaves the provider default
         self._tool_choice_supported = True
 
     def complete(
@@ -39,6 +41,8 @@ class OpenAICompatibleModel:
                 "required" if tool_choice == "any"
                 else {"type": "function", "function": {"name": tool_choice}}
             )
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
         if self.extra_body:
             kwargs["extra_body"] = self.extra_body
 

@@ -122,10 +122,34 @@ Keyword baseline (no model, workflow mode):
 | Priority (exact) | 70% | 60% |
 | Priority (within one level) | 87% | 90% |
 | Expected KB article cited | 65% | 25% |
-| Escalation precision | 80% | 0% |
-| Escalation recall | 50% | 0% |
+| Escalation precision | 80% | 50% |
+| Escalation recall | 50% | 33% |
 
-Model results: to be added after the first run.
+DeepSeek (`deepseek-flash`, thinking off, temperature 0), October 2026:
+
+| Metric | Agent, dev (30) | Agent, holdout (10) | Workflow, dev (30) | Workflow, holdout (10) |
+|---|---|---|---|---|
+| Ticket type | 100% | 80% | 100% | 90% |
+| Queue | 100% | 100% | 100% | 100% |
+| Priority (exact) | 97% | 90% | 93% | 90% |
+| Priority (within one level) | 100% | 100% | 100% | 100% |
+| Expected KB article cited | 100% | 100% | 100% | 75% |
+| Escalation precision | 100% | 75% | 100% | 75% |
+| Escalation recall | 100% | 100% | 100% | 100% |
+| Model calls per ticket | 2.07 | 2.1 | 1.0 | 1.0 |
+| Seconds per ticket | 4.0 | 4.0 | 2.6 | 2.7 |
+
+Both modes get every queue right and miss no escalations. The agent costs about twice the
+input tokens and 1.5 times the latency of the workflow. Its gain is in knowledge base
+citations on the holdout tickets, where the workflow's single search with the whole ticket
+text missed the right article twice and the agent's own search queries did not.
+
+The first run, before the ticket type and priority definitions in `config/triage.yaml` were
+rewritten, scored 60–80% on holdout priority and 80% on holdout ticket type. The
+definitions were adjusted using only the dev misses (mostly routine requests rated P3
+instead of P4, and single-user security incidents rated P1 instead of P2), and the holdout
+improved by a similar amount. With ten holdout tickets, one ticket is ten points, so
+differences between the modes on holdout are within noise.
 
 For a larger check of ticket type only, `scripts/download_hf_tickets.py` samples English
 tickets from the

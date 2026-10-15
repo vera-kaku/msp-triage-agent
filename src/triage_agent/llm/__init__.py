@@ -8,6 +8,7 @@ from ..config import Config
 from .base import ChatModel
 
 PROVIDERS = ("keyword", "deepseek", "openai", "azure", "anthropic")
+TIMEOUT_SECONDS = 60  # per request; the SDKs retry twice on timeouts and rate limits
 
 
 def _require(var: str) -> str:
@@ -28,22 +29,26 @@ def make_model(provider: str, config: Config, model: str | None = None) -> ChatM
         import anthropic
 
         from .anthropic_model import AnthropicModel
-        client = anthropic.Anthropic(api_key=_require("ANTHROPIC_API_KEY"))
+        client = anthropic.Anthropic(api_key=_require("ANTHROPIC_API_KEY"),
+                                     timeout=TIMEOUT_SECONDS)
         return AnthropicModel(client, model or "claude-haiku-5-5")
 
     from .openai_compat import OpenAICompatibleModel
 
     if provider == "deepseek":
         from openai import OpenAI
-        client = OpenAI(api_key=_require("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
+        client = OpenAI(api_key=_require("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com",
+                        timeout=TIMEOUT_SECONDS)
         name = model or "deepseek-flash"
         thinking = os.environ.get("TRIAGE_THINKING", "disabled")
+        # Temperature is ignored in thinking mode, so only set it when thinking is off.
         return OpenAICompatibleModel(client, name, f"deepseek/{name}/thinking-{thinking}",
-                                     extra_body={"thinking": {"type": thinking}})
+                                     extra_body={"thinking": {"type": thinking}},
+                                     temperature=0.0 if thinking == "disabled" else None)
 
     if provider == "openai":
         from openai import OpenAI
-        client = OpenAI(api_key=_require("OPENAI_API_KEY"))
+        client = OpenAI(api_key=_require("OPENAI_API_KEY"), timeout=TIMEOUT_SECONDS)
         if not model:
             raise SystemExit("Set TRIAGE_MODEL or pass --model to choose an OpenAI model.")
         return OpenAICompatibleModel(client, model, f"openai/{model}")
@@ -54,6 +59,7 @@ def make_model(provider: str, config: Config, model: str | None = None) -> ChatM
             api_key=_require("AZURE_OPENAI_API_KEY"),
             azure_endpoint=_require("AZURE_OPENAI_ENDPOINT"),
             api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21"),
+            timeout=TIMEOUT_SECONDS,
         )
         if not model:
             raise SystemExit("Set TRIAGE_MODEL to your Azure OpenAI deployment name.")

@@ -41,6 +41,7 @@ def test_openai_wire_format_and_reply():
     sent = client.calls[0]
     assert sent["tool_choice"] == "required"
     assert sent["extra_body"] == {"thinking": {"type": "disabled"}}
+    assert "temperature" not in sent  # provider default unless set
     roles = [m["role"] for m in sent["messages"]]
     assert roles == ["system", "user", "assistant", "tool"]
     assistant = sent["messages"][2]
@@ -51,6 +52,12 @@ def test_openai_wire_format_and_reply():
     assert reply.tool_calls[0].arguments == {"queue": "network"}
     assert reply.extra["reasoning_content"] == "more thinking"
     assert (reply.usage.input_tokens, reply.usage.output_tokens) == (100, 20)
+
+
+def test_openai_sends_temperature_when_set():
+    client = FakeOpenAI()
+    OpenAICompatibleModel(client, "m", "m", temperature=0.0).complete("system", HISTORY, [SPEC])
+    assert client.calls[0]["temperature"] == 0.0
 
 
 def test_openai_named_tool_choice_and_fallback():

@@ -95,7 +95,7 @@ class Triager:
                     results.append(ToolResult(call.id, content, is_error))
             messages.append(Message("tool", tool_results=results))
 
-        return self._fallback("The agent reached its step limit."), max_steps, rejected, \
+        return self.fallback("The agent reached its step limit."), max_steps, rejected, \
             "step_limit"
 
     def _workflow(self, text: str, state: RunState, steps: list[Step], usage: Usage):
@@ -137,7 +137,7 @@ class Triager:
                 ToolResult(c.id, "Rejected: " + "; ".join(errors), True)
                 for c in reply.tool_calls
             ]) if reply.tool_calls else Message("user", text="Call submit_triage."))
-        return self._fallback("The model did not return a valid triage."), 2, rejected, \
+        return self.fallback("The model did not return a valid triage."), 2, rejected, \
             "step_limit"
 
     # ------------------------------------------------------------------ checks
@@ -205,7 +205,7 @@ class Triager:
         triage.escalate = bool(reasons)
         return triage
 
-    def _fallback(self, reason: str) -> Triage:
+    def fallback(self, reason: str) -> Triage:
         return Triage(
             ticket_type="incident", queue="service-desk", priority="P3", confidence=0.0,
             summary=reason, draft_reply="", escalate=True,

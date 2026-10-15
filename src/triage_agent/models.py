@@ -48,7 +48,7 @@ class RunResult:
     output_tokens: int
     seconds: float
     rejected_submissions: int
-    stop_reason: str  # "submitted" or "step_limit"
+    stop_reason: str  # "submitted", "step_limit" or "error"
 
     def to_dict(self) -> dict:
         return asdict(self)
